@@ -7,81 +7,58 @@
 
 ## Resources
 
-- [SIM7000 FlashTools v1.4.3](https://drive.google.com/file/d/1-ADY7_fbXehiQBJZhwp7Kht-ZQpFE1np/view?usp=sharing)
+- [SIM7000 FlashTools v1.5.8](https://drive.google.com/file/d/1BUtRWizTqEeI8x4khVRwp_ITektyUyoN/view?usp=sharing)
 - [SIM7000 Driver](https://drive.google.com/file/d/1f02TTNoyirFPGWbob1khy9dnoBonoVe7/view?usp=sharing)
 - [1529B11V01SIM7000G Fixed MQTTS,HTTPS](https://drive.google.com/file/d/12rZ9b7z3ONCPwtevOcz3khYl5vw4zGL3/view?usp=sharing)
 - [Tools and files for backing up and restoring QCN](https://drive.google.com/drive/folders/10Fik8zT4UFX1dmCLbZ0GkgIIsxu356QT)
 
 > \[!IMPORTANT]
-> Backing up and restoring QCN tools and files only requires downloading and viewing when there are problems with the upgrade. These operations are not required for normal upgrades.
+>
+> Note: The recommended upgrade tool version is v1.5.8. Other versions are not recommended as they may cause loss of qcn.
 >
 
 
-### To solder the USB to the upgrade solder joint, you can choose a flying lead or directly solder the USB to the contact
+## `1` Write to ATDebug
 
-### Power on the SIM7000G board, and at the same time connect the USB interface to the computer port (please note that you need to insert the SIM card during the upgrade process)
+* Write [ATDebug](../../../../../examples/ATdebug/ATdebug.ino) to start the modem without running any application
 
-![](./images/16.png)
-![](./images/17.png)
+## `2` Connect to the Modem USB port
 
-### Download [SIM7000X Driver](https://drive.google.com/file/d/1f02TTNoyirFPGWbob1khy9dnoBonoVe7/view?usp=sharing), and decompress the corresponding compressed package according to the system you are using
+- The SIM7000G ESP32 version has a reserved USB solder point on the battery holder side for the modem. You need to connect a USB cable to this solder point, or directly solder a USB-A cable to it, as shown below.
+- The SIN7000G-S3-Standard version requires two USB-C ports.
+- Connect both the ESP32 USB-C port and the modem's USB port to your computer, using one port for power and the other for modem upgrades.
 
-### Open the computer device manager and follow the steps below to add the driver
+![USB](./images/16.png)
+![USB](./images/17.png)
 
-![](./images/18.png)
-![](./images/19.png)
-![](./images/20.png)
-![](./images/21.png)
-![](./images/22.png)
-![](./images/23.png)
-Follow the above steps to install the driver for the remaining ports that are not installed.
-![](./images/24.png)
+## `3` Update Driver
 
-### Unzip `SIM7000-Update-tools.7z`
+![update_driver](./images/update_driver.gif)
 
-### Open `setup.exe` , install update tools , follow the steps below to install
+## `4` Update the firmware
 
-![](./images/1.png)
-![](./images/2.png)
-![](./images/3.png)
-![](./images/4.png)
-![](./images/5.png)
-![](./images/6.png)
-![](./images/7.png)
-![](./images/8.png)
+1. Click **Load -> MDM9206(SIM7000Series)**
 
-### Open the upgrade tool and follow the diagram below
+![upgrade-1](./images/upgrade-1.png)
 
-> \[!IMPORTANT]
-> If the tool you are using has the QCN backup and restore option, please do not check it.
->
+2. Click **... -> Select the firmware folder (the downloaded firmware is compressed in rar or zip format and needs to be unzipped first)**
 
-![](./images/9.png)
-![](./images/10.png)
-![](./images/11.png)
-![](./images/12.png)
-![](./images/13.png)
-![](./images/14.png)
-![](./images/15.png)
-![](./images/25.png)
-![](./images/26.png)
+![upgrade-2](./images/upgrade-2.png)
 
-Note that when the following figure is executed, it will prompt that the new port has no driver installed. After adding the driver according to the above steps to install the driver, click Start again to update.
+3. Close Firmware Selection -> Click **Start**
 
-![](./images/27.png)
+![upgrade-3](./images/upgrade-3.png)
 
-When prompted `Update Success!`, click Stop to stop the update. At this point, the firmware update has been completed.
+4. Wait for the upgrade to complete
 
-![](./images/28.png)
+![upgrade-4](./images/upgrade-4.png)
 
-### Open the serial terminal tool, or the built-in serial tool of `Arduino IDE`, select `AT Port` for the port, and enter `AT+CGMR` to view the firmware version
+5. After the upgrade is complete, the modem's USB port will appear in the device manager again. Click **stop**
 
-![](./images/29.png)
+![upgrade-5](./images/upgrade-5.png)
 
-### Note
+6. Open the serial monitor, restart ESP32, and send `AT+SIMCOMATI` to query the current running firmware version.
 
-If you need to update the 7070G internal firmware, please select the model below to update
+![upgrade-6](./images/upgrade-6.png)
 
-![](./images/7070g.png)
-
-Note: the modem must be kept powered on during the procedure; upload an appropriate sketch such as `ATdebug`
+7. The upgrade is now complete
