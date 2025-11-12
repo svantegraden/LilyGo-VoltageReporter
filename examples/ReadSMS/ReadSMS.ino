@@ -39,7 +39,7 @@ TinyGsm modem(SerialAT);
 // It depends on the operator whether to set up an APN. If some operators do not set up an APN,
 // they will be rejected when registering for the network. You need to ask the local operator for the specific APN.
 // APNs from other operators are welcome to submit PRs for filling.
-// #define NETWORK_APN     "CHN-CT"             //CHN-CT: China Telecom
+//#define NETWORK_APN     "ctlte"             //ctlte: China Telecom
 
 void setup()
 {

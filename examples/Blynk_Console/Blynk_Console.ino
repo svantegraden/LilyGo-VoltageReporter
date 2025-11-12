@@ -41,13 +41,19 @@
 #define BLYNK_TEMPLATE_NAME         "Device"
 #define BLYNK_AUTH_TOKEN            "YourAuthToken"
 
-/* If you are using a T-Mobile SIM card and cannot activate the network, try turning on IPv6 */
-// #define T_MOBILE_USE_IPV6
-
 // It depends on the operator whether to set up an APN. If some operators do not set up an APN,
 // they will be rejected when registering for the network. You need to ask the local operator for the specific APN.
 // APNs from other operators are welcome to submit PRs for filling.
-// #define NETWORK_APN     "CHN-CT"             //CHN-CT: China Telecom
+//#define NETWORK_APN     "ctlte"             //ctlte: China Telecom
+
+// When using an IPv6 access point, the correct IPv6 APN must be configured.
+bool use_ipv6_access_point = false; // Whether to use IPv6 to set the access point
+
+#ifdef NETWORK_APN
+String apn = NETWORK_APN;
+#else
+String apn = "";
+#endif
 
 
 // Default heartbeat interval for GSM is 60
@@ -248,21 +254,22 @@ void setup()
         Serial.println(ueInfo);
     }
 
-
-
-#if defined(TINY_GSM_MODEM_SIM7600) && defined(T_MOBILE_USE_IPV6)
-    modem.sendAT("+CGDCONT=1,\"IPV6\",\"\"");
-    modem.waitResponse();
-    modem.sendAT("+CSOCKSETPN=1,6");
-    modem.waitResponse();
-    modem.sendAT("+CIPCFG=\"IP-TYPE\",2");
-    modem.waitResponse();
-    Serial.println("IPv6 mode enabled");
-#endif
-
-    if (!modem.setNetworkActive()) {
-        Serial.println("Enable network failed!");
-        Serial.println("If you are using a T-Mobile SIM card and cannot activate the network, try turning on IPv6");
+    /**
+     *  Configure the network APN and specify whether to access the network using IPv6. If unsure, please consult your SIM card provider.
+     */
+    Serial.print("Connecting to network with APN:"); Serial.println(apn);
+    Serial.print("Use IPv6 access point:"); Serial.println(use_ipv6_access_point ? "true" : "false");
+    retry = 3;
+    while (retry--) {
+        if (modem.setNetworkActive(apn, use_ipv6_access_point)) {
+            break;
+        }
+        Serial.println("Enable network failed, retry after 3s...");
+        delay(3000);
+    }
+    if (retry < 0) {
+        Serial.println("Failed to enable network!");
+        return;
     }
 
     delay(5000);

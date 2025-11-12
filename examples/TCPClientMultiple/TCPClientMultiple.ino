@@ -12,7 +12,16 @@
 // It depends on the operator whether to set up an APN. If some operators do not set up an APN,
 // they will be rejected when registering for the network. You need to ask the local operator for the specific APN.
 // APNs from other operators are welcome to submit PRs for filling.
-// #define NETWORK_APN     "CHN-CT"             //CHN-CT: China Telecom
+//#define NETWORK_APN     "ctlte"             //ctlte: China Telecom
+
+// When using an IPv6 access point, the correct IPv6 APN must be configured.
+bool use_ipv6_access_point = false; // Whether to use IPv6 to set the access point
+
+#ifdef NETWORK_APN
+String apn = NETWORK_APN;
+#else
+String apn = "";
+#endif
 
 // Set serial for debug console (to the Serial Monitor, default speed 115200)
 #define SerialMon Serial
@@ -215,9 +224,24 @@ void setup()
         Serial.println(ueInfo);
     }
 
-    if (!modem.setNetworkActive()) {
-        Serial.println("Enable network failed!");
+    /**
+     *  Configure the network APN and specify whether to access the network using IPv6. If unsure, please consult your SIM card provider.
+     */
+    Serial.print("Connecting to network with APN:"); Serial.println(apn);
+    Serial.print("Use IPv6 access point:"); Serial.println(use_ipv6_access_point ? "true" : "false");
+    retry = 3;
+    while (retry--) {
+        if (modem.setNetworkActive(apn, use_ipv6_access_point)) {
+            break;
+        }
+        Serial.println("Enable network failed, retry after 3s...");
+        delay(3000);
     }
+    if (retry < 0) {
+        Serial.println("Failed to enable network!");
+        return;
+    }
+    delay(5000);
 
     String ipAddress = modem.getLocalIP();
     Serial.print("Network IP:"); Serial.println(ipAddress);
