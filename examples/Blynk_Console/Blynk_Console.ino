@@ -77,7 +77,6 @@ TinyGsm modem(SerialAT);
 
 // Your GPRS credentials
 // Leave empty, if missing user or pass
-char apn[]  = "YourAPN";
 char user[] = "";
 char pass[] = "";
 
@@ -307,7 +306,7 @@ void setup()
     String name = modem.getModemName();
     Serial.println("Modem Name: " + name);
 
-    Blynk.begin(BLYNK_AUTH_TOKEN, modem, apn, user, pass);
+    Blynk.begin(BLYNK_AUTH_TOKEN, modem, apn.c_str(), user, pass);
     // Setup a function to be called every two second
     timer.setInterval(2000L, sendRandomData);
 
