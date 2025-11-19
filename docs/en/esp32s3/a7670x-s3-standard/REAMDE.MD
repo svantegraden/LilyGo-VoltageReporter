@@ -139,6 +139,13 @@
 | Default SDA       | 3                  | ✅️    |
 | Default SCL       | 2                  | ✅️    |
 
+### Modem Pins
+
+| Name                         | GPIO NUM | Enable level | AT Command                     |
+| ---------------------------- | -------- | ------------ | ------------------------------ |
+| GPS Ant Power Enable         | 1        | High         | `AT+CGDRT=1,1 ; AT+CGSETV=1,1` |
+| Audio power amplifier Enable | 3        | High         | `AT+CGDRT=3,1 ; AT+CGSETV=3,1` |
+
 * The `Power Save Mode pin` is used to set the power capability of the power supply. Setting it to HIGH enables maximum power output. Setting it to LOW reduces current consumption.
 * If a camera is connected externally, there will be no free GPIO. If the camera is not used, the camera's GPIO can be used for other purposes.
 * `SDA`, `SCL` can only be used as I2C function, not as other functions
@@ -149,6 +156,8 @@
 The power-on sequence is: power on all cameras -> power off all cameras -> delay 300 milliseconds -> power on all cameras -> delay 100 milliseconds.
 * `Camera PWD` : In order to maximize the use of GPIO, all GPIOs are not assigned to the camera PWD Pin. When the camera is not in use, you only need to turn off the camera power to completely turn off the power supply of the camera.
 * `Camera Pins` : if the camera is not used, then all the pins assigned to the camera by default can be freely allocated and used without restrictions
+* `GPS Ant Power Enable` : When using GPS, you must set the modem's GPIO1 to high level by sending `AT+CGDRT=1,1; AT+CGSETV=1,1`. When not using GPS, you can send `AT+CGDRT=1,1; AT+CGSETV=1,0` to turn off the GPS antenna power supply and save power.
+* `Audio power amplifier Enable`: When using audio playback or making calls, you must send `AT+CGDRT=3,1; AT+CGSETV=3,1` to set the modem's GPIO1 to a high level. When not in use, you can send `AT+CGDRT=3,1; AT+CGSETV=3,0` to turn off the power amplifier and save power.
 
 ### ⚡ Electrical parameters
 
