@@ -1,10 +1,11 @@
 /**
- * @file      ModemGpsStream.ino
+ * @file      S3_StandardSeries_External_GPS_Shield.ino
  * @author    Lewis He (lewishe@outlook.com)
  * @license   MIT
  * @copyright Copyright (c) 2025  ShenZhen XinYuan Electronic Technology Co., Ltd
- * @date      2025-07-12
+ * @date      2025-11-28
  * @note
+ *      This example demonstrates how to use an external GPS module. With this example, the Modem GPS must be disconnected from the ESP.
  *      This sketch is only applicable to the
  *      1. T-A7670X-S3-Standard
  *      2. T-SIM7670G-S3-Standard
@@ -23,7 +24,7 @@
 // See all AT commands, if wanted
 #define DUMP_AT_COMMANDS
 // Decode GPS stream, if not defined then output NMEA
-#define DECODER_GPS_STREAM
+// #define DECODER_GPS_STREAM
 
 
 #include <TinyGsmClient.h>
@@ -224,67 +225,14 @@ void setup()
         delay(5000);
     }
 
+    Serial.println("Start the external GPS module and use the default 9600 baud rate for communication");
 
+    // External GPS module wake-up pin, high level working, low level sleep
+    pinMode(GPS_SHIELD_WAKEUP_PIN, OUTPUT);
+    digitalWrite(GPS_SHIELD_WAKEUP_PIN, HIGH);
 
-    if (!external_gps_module) {
-        int retry = 15;
-
-#if defined(TINY_GSM_MODEM_SIM7080)
-        // SIM7080G Disable the output first and reconfigure the GPS output
-        modem.configGNSS_OutputPort(NMEA_OUTPUT_DISABLE);
-#endif
-
-        Serial.println("Start the Modem GPS module and use the default 115200 baud rate for communication");
-        while (!modem.enableGPS(MODEM_GPS_ENABLE_GPIO, MODEM_GPS_ENABLE_LEVEL)) {
-            Serial.print(".");
-            if (retry-- <= 0) {
-                Serial.println("GPS startup failed. Please check whether the board you ordered contains GPS function.");
-                delay(1000);
-            }
-            delay(2000);
-        }
-        Serial.println();
-
-        Serial.println("GPS Enabled");
-
-        // Set the communication baud rate
-        modem.setGPSBaud(115200);
-
-        // If you have a GPS backup battery connected, you can try a hot start.
-        modem.gpsHotStart();
-
-#if defined(TINY_GSM_MODEM_A7670) || defined(TINY_GSM_MODEM_A7608)
-        modem.setGPSMode(GNSS_MODE_GPS_BDS_GALILEO_SBAS_QZSS);
-#elif defined(TINY_GSM_MODEM_SIM7670G)
-        modem.setGPSMode(GNSS_MODE_GPS_GLONASS_BDS);
-#elif defined(TINY_GSM_MODEM_SIM7600)
-        modem.setGPSMode(GNSS_MODE_ALL);
-#elif defined(TINY_GSM_MODEM_SIM7000SSL) || defined(TINY_GSM_MODEM_SIM7000)
-        modem.setGPSMode(GNSS_MODE_ALL);
-#endif
-
-#if defined(TINY_GSM_MODEM_SIM7000SSL) || defined(TINY_GSM_MODEM_SIM7000) || defined(TINY_GSM_MODEM_SIM7080)
-        // Redirect SIM70XX modem GPS NMEA to UART for ESP processing
-        modem.configGNSS_OutputPort(NMEA_TO_UART3_PORT);
-#endif
-
-        modem.configNMEASentence(NMEA_GPGGA | NMEA_GPGSA | NMEA_GPGSV | NMEA_GPRMC);
-
-        // Modem gps baudrate is 115200
-        SerialGPS.begin(115200, SERIAL_8N1, MODEM_GPS_TX_PIN, MODEM_GPS_RX_PIN);
-    } else {
-
-        Serial.println("Start the external GPS module and use the default 9600 baud rate for communication");
-
-        // External GPS module wake-up pin, high level working, low level sleep
-        pinMode(GPS_SHIELD_WAKEUP_PIN, OUTPUT);
-        digitalWrite(GPS_SHIELD_WAKEUP_PIN, HIGH);
-
-        // External GPS module baudrate is 115200
-        SerialGPS.begin(9600, SERIAL_8N1, MODEM_GPS_TX_PIN, MODEM_GPS_RX_PIN);
-    }
-
-
+    // External GPS module baudrate is 115200
+    SerialGPS.begin(9600, SERIAL_8N1, MODEM_GPS_TX_PIN, MODEM_GPS_RX_PIN);
 
     Serial.println("Next you should see NMEA sentences in the serial monitor");
 
