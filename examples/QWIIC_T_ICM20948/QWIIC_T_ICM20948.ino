@@ -4,7 +4,7 @@
  * @license   MIT
  * @copyright Copyright (c) 2025  ShenZhen XinYuan Electronic Technology Co., Ltd
  * @date      2025-11-28
- * @note      Example demonstrates configuring the QWIIC I2C/UART port as I2C using the ICM20948 sensor. 
+ * @note      Example demonstrates configuring the QWIIC I2C/UART port as I2C using the ICM20948 sensor.
  *            The UART port does not have a pull-up resistor connected by default;  please add an external 10K pull-up resistor.
  */
 #include <Arduino.h>
@@ -20,8 +20,8 @@
 
 #define ICM20948_ADDR           (0x68)
 
-ICM20948_WE icm1 = ICM20948_WE(ICM20948_ADDR, &Wire);
-ICM20948_WE icm2 = ICM20948_WE(ICM20948_ADDR, &Wire1);
+ICM20948_WE icm1 = ICM20948_WE(&Wire, ICM20948_ADDR);
+ICM20948_WE icm2 = ICM20948_WE(&Wire1, ICM20948_ADDR);
 
 bool found_icm1 = false;
 bool found_icm2 = false;
@@ -56,7 +56,7 @@ uint32_t deviceScan(TwoWire &_port)
 
 
 
-bool initICM(TwoWire &w, ICM20948_WE &icm, uint8_t address = ICM20948_ADDR)
+bool initICM(ICM20948_WE &icm)
 {
     if (!icm.init()) {
         Serial.println("ICM20948 does not respond");
@@ -140,13 +140,19 @@ void setup()
     if (Wire.endTransmission() == 0) {
         Serial.println("Found ICM20948 on UART port");
         found_icm1 = true;
-        initICM(Wire, icm1);
+        bool rlst = initICM(icm1);
+        while (!rlst) {
+            Serial.println("Init Wire port ICM20948 failed"); delay(1000);
+        }
     }
     Wire1.beginTransmission(ICM20948_ADDR);
     if (Wire1.endTransmission() == 0) {
         Serial.println("Found ICM20948 on I2C port");
         found_icm2 = true;
-        initICM(Wire1, icm2);
+        bool rlst = initICM(icm2);
+        while (!rlst) {
+            Serial.println("Init Wire port ICM20948 failed"); delay(1000);
+        }
     }
 
 }
