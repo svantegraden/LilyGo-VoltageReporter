@@ -112,26 +112,31 @@
 
 ### 📍 Pins Map
 
-| Name                     | GPIO NUM | Free |
-| ------------------------ | -------- | ---- |
-| Peripheral power control | 12       | ❌    |
-| Modem TX                 | 26       | ❌    |
-| Modem RX                 | 27       | ❌    |
-| Modem PWR                | 4        | ❌    |
-| Modem RESET              | 5        | ❌    |
-| Modem RING               | 33       | ❌    |
-| Modem DTR                | 25       | ❌    |
-| SD SCK                   | 14       | ❌    |
-| SD MISO                  | 2        | ❌    |
-| SD MOSI                  | 15       | ❌    |
-| SD CS                    | 13       | ❌    |
-| Battery ADC Pin          | 35       | ❌    |
-| Solar ADC Pin            | 36       | ❌    |
-| Default SDA              | 21       | ✅️    |
-| Default SCL              | 22       | ✅️    |
+| Name                                 | GPIO NUM | Free |
+| ------------------------------------ | -------- | ---- |
+| Peripheral power control             | 12       | ❌    |
+| Modem TX                             | 26       | ❌    |
+| Modem RX                             | 27       | ❌    |
+| Modem PWR                            | 4        | ❌    |
+| Modem RESET                          | 5        | ❌    |
+| Modem RING                           | 33       | ❌    |
+| Modem DTR                            | 25       | ❌    |
+| SD SCK                               | 14       | ❌    |
+| SD MISO                              | 2        | ❌    |
+| SD MOSI                              | 15       | ❌    |
+| SD CS                                | 13       | ❌    |
+| Battery ADC Pin                      | 35       | ❌    |
+| Solar ADC Pin                        | 36       | ❌    |
+| Default SDA                          | 21       | ✅️    |
+| Default SCL                          | 22       | ✅️    |
+| GNSS Tx    (A7670G-GPS Version Only) | 21       | ❌    |
+| GNSS Rx    (A7670G-GPS Version Only) | 22       | ❌    |
+| GNSS PPS   (A7670G-GPS Version Only) | 23       | ❌    |
+| GNSS WakeUp(A7670G-GPS Version Only) | 19       | ❌    |
 
 * Peripheral power control pin. When using SD or modem, this GPIO must be set to high level, otherwise these functions cannot be used.
 * ESP32 models GPIO33 and above can only be set as input, not output
+* The A7670G-GPS version 21/22 is already in use and cannot be used as SDA/SCL. It is recommended to use other GPIOs as alternatives.
 
 > \[!IMPORTANT]
 > ESP32 version Since the SD card uses IO2 as CS, you cannot upload software in the Arduino IDE when you insert the SD card, so you must remove the SD card when uploading new code
