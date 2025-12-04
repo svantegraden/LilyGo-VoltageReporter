@@ -62,6 +62,11 @@ uint32_t check_connect_millis = 0;
 String ueInfo = "";
 String imei = "";
 
+uint32_t consumableValue[2] = { 0 };
+uint32_t startValue[2] = { 0 };
+
+uint8_t count = 0;
+
 void mqtt_callback(const char *topic, const uint8_t *payload, uint32_t len)
 {
     Serial.println();
@@ -203,7 +208,7 @@ void setup()
     if (!modem.setNetworkMode(MODEM_NETWORK_AUTO)) {
         Serial.println("Set network mode failed!");
     }
-    String mode = modem.getNetworkModes();
+    String mode = modem.getNetworkModeString();
     Serial.print("Current network mode : ");
     Serial.println(mode);
 #endif
@@ -297,14 +302,18 @@ void setup()
 
 void loop()
 {
-    int consumableRaw;
+    uint16_t consumableRaw;
     std::string state_topic_formatted;
     std::string payload_formatted;
     bool result;
 
+    count++;
+
     //consumableRaw = analogReadRaw(GPIO_NUM_34);
     //consumableRaw = getBatteryVoltage();
     consumableRaw = getVoltageMedian(GPIO_NUM_34);
+    Serial.print(count);
+    Serial.print(" ");
     Serial.println(consumableRaw);
 
     // Debug AT
@@ -315,19 +324,31 @@ void loop()
         SerialAT.write(Serial.read());
     }
 
-    if (!modem.mqtt_connected()) {
-        mqtt_connect();
-    } else {
-        state_topic_formatted = fmt::format(state_topic, imei.c_str());
-        payload_formatted = fmt::format(state_payload, (float)consumableRaw/224, (float)consumableRaw/224, consumableRaw, consumableRaw);
+    if(consumableRaw != consumableValue[0]
+        || consumableRaw != consumableValue[1]
+        || count >= 15 ) {
+        
+        consumableValue[1] = consumableValue[0];
+        consumableValue[0] = consumableRaw;
 
-        result = modem.mqtt_publish(0, state_topic_formatted.c_str(), payload_formatted.c_str());
-
-        if(result) {
-            Serial.print("State publish successfully.");
+        if(count >= 15) {
+            count = 0;
         }
-        else {
-            Serial.print("State publish failed.");
+
+        if (!modem.mqtt_connected()) {
+            mqtt_connect();
+        } else {
+            state_topic_formatted = fmt::format(state_topic, imei.c_str());
+            payload_formatted = fmt::format(state_payload, (float)consumableRaw/224, (float)consumableRaw/224, consumableRaw, consumableRaw);
+
+            result = modem.mqtt_publish(0, state_topic_formatted.c_str(), payload_formatted.c_str());
+
+            if(result) {
+                Serial.print("State publish successfully.");
+            }
+            else {
+                Serial.print("State publish failed.");
+            }
         }
     }
 
