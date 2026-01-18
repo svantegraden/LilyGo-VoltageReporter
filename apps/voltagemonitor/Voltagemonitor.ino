@@ -16,6 +16,9 @@
 
 #define DEBUG
 
+#define uS_TO_S_FACTOR      1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP       60          /* Time ESP32 will go to sleep (in seconds) */
+
 #include "utilities.h"
 #include <TinyGsmClient.h>
 
@@ -53,7 +56,6 @@ const char *config_topic = "homeassistant/device/{0}/config";
 const char *state_topic = "homeassistant/sensor/{0}/state";
 
 const char *config_payload = "{{ \"dev\": {{ \"ids\": \"{0}\", \"name\": \"Nimbus 26 Elin A7670\", \"mf\": \"Svante Gradén\", \"sw\": \"1.0\", \"sn\": \"{0}\" }}, \"o\": {{ \"name\":\"Lilygo T-Call\" }}, \"cmps\": {{ \"start_v\": {{ \"p\": \"sensor\", \"name\": \"Start battery voltage\", \"device_class\":\"voltage\", \"unit_of_measurement\":\"V\", \"value_template\":\"{{{{ value_json.s }}}}\", \"unique_id\":\"battery_voltage_{0}_start\", \"force_update\": \"true\", \"suggested_display_precision\": 2 }}, \"start_r\": {{ \"p\": \"sensor\", \"name\": \"Start battery raw\", \"unit_of_measurement\":\"units\", \"value_template\":\"{{{{ value_json.sr }}}}\", \"unique_id\":\"battery_raw_{0}_start\", \"force_update\": \"true\", \"suggested_display_precision\": 0 }}, \"consumable_v\": {{ \"p\": \"sensor\", \"name\": \"Consumable battery voltage\", \"device_class\":\"voltage\", \"unit_of_measurement\":\"V\", \"value_template\":\"{{{{ value_json.c }}}}\", \"unique_id\":\"battery_voltage_{0}_consumable\", \"force_update\": \"true\", \"suggested_display_precision\": 2 }}, \"consumable_r\": {{ \"p\": \"sensor\", \"name\": \"Consumable battery raw\", \"unit_of_measurement\":\"units\", \"value_template\":\"{{{{ value_json.cr }}}}\", \"unique_id\":\"battery_raw_{0}_consumable\", \"force_update\": \"true\", \"suggested_display_precision\": 0 }} }}, \"state_topic\":\"homeassistant/sensor/{0}/state\" }}";
-//const char *state_payload = "{{ \"s\": {0}, \"c\": {1}, \"sr\": {2}, \"cr\": {3} }}";
 const char *state_payload = "{{ \"s\": {0:.2f}, \"c\": {1:.2f}, \"sr\": {2}, \"cr\": {3} }}";
 
 // Current connection index, range 0~1
@@ -62,10 +64,11 @@ uint32_t check_connect_millis = 0;
 String ueInfo = "";
 String imei = "";
 
-uint32_t consumableValue[2] = { 0 };
-uint32_t startValue[2] = { 0 };
+RTC_DATA_ATTR uint32_t consumableValue[3] = { 0 };
+RTC_DATA_ATTR uint32_t startValue[3] = { 0 };
 
-uint8_t count = 0;
+RTC_DATA_ATTR uint16_t count = 0;
+RTC_DATA_ATTR uint8_t samplesWithoutSend = 0;
 
 void mqtt_callback(const char *topic, const uint8_t *payload, uint32_t len)
 {
@@ -134,12 +137,29 @@ uint32_t getVoltageMedian(uint8_t pin)
     return data[data.size()/2];
 }
 
+void blink(int count)
+{
+    for(int i = 0;i < count;i++) {
+        digitalWrite(BOARD_LED_PIN, HIGH);
+        delay(500);
+        digitalWrite(BOARD_LED_PIN, LOW);
+        if(i < count-1) delay(250);
+    }
+}
+
 void setup()
 {
+    uint16_t consumableRaw;
+    uint16_t startRaw;
     std::string config_topic_formatted;
     std::string config_payload_formatted;
 
+    std::string state_topic_formatted;
+    std::string payload_formatted;
+
     bool result;
+    bool send_config = false;
+    bool send_state = false;
 
     Serial.begin(115200); // Set console baud rate
 
@@ -147,199 +167,220 @@ void setup()
 
     SerialAT.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
 
+    pinMode(BOARD_LED_PIN, OUTPUT);
+    analogSetPinAttenuation(GPIO_NUM_34, ADC_0db);
+     analogSetPinAttenuation(GPIO_NUM_35, ADC_0db);
+
 #ifdef BOARD_POWERON_PIN
     pinMode(BOARD_POWERON_PIN, OUTPUT);
     digitalWrite(BOARD_POWERON_PIN, HIGH);
 #endif
 
-    // Set modem reset pin, reset modem
-#ifdef MODEM_RESET_PIN
-    pinMode(MODEM_RESET_PIN, OUTPUT);
-    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL); delay(100);
-    digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL); delay(2600);
-    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
-#endif
+    startRaw = getVoltageMedian(GPIO_NUM_34);
+    consumableRaw = getVoltageMedian(GPIO_NUM_35);
 
-    pinMode(BOARD_PWRKEY_PIN, OUTPUT);
-    digitalWrite(BOARD_PWRKEY_PIN, LOW);
-    delay(100);
-    digitalWrite(BOARD_PWRKEY_PIN, HIGH);
-    delay(100);
-    digitalWrite(BOARD_PWRKEY_PIN, LOW);
-
-    // Check if the modem is online
-    Serial.println("Start modem...");
-
-    int retry = 0;
-    while (!modem.testAT(1000)) {
-        Serial.println(".");
-        if (retry++ > 10) {
-            digitalWrite(BOARD_PWRKEY_PIN, LOW);
-            delay(100);
-            digitalWrite(BOARD_PWRKEY_PIN, HIGH);
-            delay(1000);
-            digitalWrite(BOARD_PWRKEY_PIN, LOW);
-            retry = 0;
-        }
-    }
-    Serial.println();
-
-    // Check if SIM card is online
-    SimStatus sim = SIM_ERROR;
-    while (sim != SIM_READY) {
-        sim = modem.getSimStatus();
-        switch (sim) {
-        case SIM_READY:
-            Serial.println("SIM card online");
-            break;
-        case SIM_LOCKED:
-            Serial.println("The SIM card is locked. Please unlock the SIM card first.");
-            // const char *SIMCARD_PIN_CODE = "123456";
-            // modem.simUnlock(SIMCARD_PIN_CODE);
-            break;
-        default:
-            break;
-        }
-        delay(1000);
-    }
-
-    //SIM7672G Can't set network mode
-#ifndef TINY_GSM_MODEM_SIM7672
-    if (!modem.setNetworkMode(MODEM_NETWORK_AUTO)) {
-        Serial.println("Set network mode failed!");
-    }
-    String mode = modem.getNetworkModeString();
-    Serial.print("Current network mode : ");
-    Serial.println(mode);
-#endif
-
-#ifdef NETWORK_APN
-    Serial.printf("Set network apn : %s\n", NETWORK_APN);
-    modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), NETWORK_APN, "\"");
-    if (modem.waitResponse() != 1) {
-        Serial.println("Set network apn error !");
-    }
-#endif
-
-    // Check network registration status and network signal status
-    int16_t sq ;
-    Serial.print("Wait for the modem to register with the network.");
-    RegStatus status = REG_NO_RESULT;
-    while (status == REG_NO_RESULT || status == REG_SEARCHING || status == REG_UNREGISTERED) {
-        status = modem.getRegistrationStatus();
-        switch (status) {
-        case REG_UNREGISTERED:
-        case REG_SEARCHING:
-            sq = modem.getSignalQuality();
-            Serial.printf("[%lu] Signal Quality:%d\n", millis() / 1000, sq);
-            delay(1000);
-            break;
-        case REG_DENIED:
-            Serial.println("Network registration was rejected, please check if the APN is correct");
-            return ;
-        case REG_OK_HOME:
-            Serial.println("Online registration successful");
-            break;
-        case REG_OK_ROAMING:
-            Serial.println("Network registration successful, currently in roaming mode");
-            break;
-        default:
-            Serial.printf("Registration Status:%d\n", status);
-            delay(1000);
-            break;
-        }
-    }
-    Serial.println();
-
-
-    Serial.printf("Registration Status:%d\n", status);
-    delay(1000);
-
-    if (modem.getSystemInformation(ueInfo)) {
-        Serial.print("Inquiring UE system information:");
-        Serial.println(ueInfo);
-    }
-
-    imei = modem.getIMEI();
-    
-    Serial.print("IMEI: ");
-    Serial.println(imei.c_str());
-
-    if (!modem.setNetworkActive()) {
-        Serial.println("Enable network failed!");
-    }
-
-    delay(5000);
-
-    String ipAddress = modem.getLocalIP();
-    Serial.print("Network IP:"); Serial.println(ipAddress);
-
-    analogSetPinAttenuation(GPIO_NUM_34, ADC_0db);
-
-    // Initialize MQTT, use SSL, skip authentication server
-    modem.mqtt_begin(false);
-
-    if (!mqtt_connect()) {
-        return ;
-    }
-    else {
-        config_topic_formatted = fmt::format(config_topic, imei.c_str());
-        config_payload_formatted = fmt::format(config_payload, imei.c_str());
-
-        Serial.print(config_topic_formatted.c_str());
-        Serial.print(config_payload_formatted.c_str());
-
-        result = modem.mqtt_publish(0, config_topic_formatted.c_str(), config_payload_formatted.c_str());
-
-        if(result) {
-            Serial.print("Config publish successfully.");
-        }
-        else {
-            Serial.print("Config publish failed.");
-        }
-    }
-}
-
-void loop()
-{
-    uint16_t consumableRaw;
-    std::string state_topic_formatted;
-    std::string payload_formatted;
-    bool result;
-
-    count++;
-
-    //consumableRaw = analogReadRaw(GPIO_NUM_34);
-    //consumableRaw = getBatteryVoltage();
-    consumableRaw = getVoltageMedian(GPIO_NUM_34);
-    Serial.print(count);
+/*  Serial.print(count);
+    Serial.print(" ");
+    Serial.print(startRaw);
     Serial.print(" ");
     Serial.println(consumableRaw);
+*/
 
-    // Debug AT
-    while (SerialAT.available()) {
-        Serial.write(SerialAT.read());
+    if(count == 0) {
+        send_config = true;
     }
-    while (Serial.available()) {
-        SerialAT.write(Serial.read());
+
+    if(startRaw != startValue[0]
+        && startRaw != startValue[1]
+        && startRaw != startValue[2]) {
+        
+        startValue[2] = startValue[1];
+        startValue[1] = startValue[0];
+        startValue[0] = startRaw;
+
+        send_state = true;
     }
 
     if(consumableRaw != consumableValue[0]
-        || consumableRaw != consumableValue[1]
-        || count >= 15 ) {
+        && consumableRaw != consumableValue[1]
+        && consumableRaw != consumableValue[2]) {
         
+        consumableValue[2] = consumableValue[1];
         consumableValue[1] = consumableValue[0];
         consumableValue[0] = consumableRaw;
 
-        if(count >= 15) {
-            count = 0;
+        send_state = true;
+    }
+
+    if(send_state) {
+        samplesWithoutSend = 0;
+    }
+    else {
+        if(samplesWithoutSend >= 14) {
+            send_state = true;
+            samplesWithoutSend = 0;
+        }
+        else {
+            samplesWithoutSend++;
+        }
+    }
+
+    if (send_config || send_state) {
+        // Set modem reset pin, reset modem
+#ifdef MODEM_RESET_PIN
+        pinMode(MODEM_RESET_PIN, OUTPUT);
+        digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL); delay(100);
+        digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL); delay(2600);
+        digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+#endif
+
+        pinMode(BOARD_PWRKEY_PIN, OUTPUT);
+        digitalWrite(BOARD_PWRKEY_PIN, LOW);
+        delay(100);
+        digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+        delay(100);
+        digitalWrite(BOARD_PWRKEY_PIN, LOW);
+
+        // Check if the modem is online
+        Serial.println("Start modem...");
+
+        int retry = 0;
+        while (!modem.testAT(1000)) {
+            Serial.println(".");
+            if (retry++ > 10) {
+                digitalWrite(BOARD_PWRKEY_PIN, LOW);
+                delay(100);
+                digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+                delay(1000);
+                digitalWrite(BOARD_PWRKEY_PIN, LOW);
+                retry = 0;
+            }
+        }
+        Serial.println();
+
+        // Check if SIM card is online
+        SimStatus sim = SIM_ERROR;
+        while (sim != SIM_READY) {
+            sim = modem.getSimStatus();
+            switch (sim) {
+            case SIM_READY:
+                Serial.println("SIM card online");
+                break;
+            case SIM_LOCKED:
+                Serial.println("The SIM card is locked. Please unlock the SIM card first.");
+                // const char *SIMCARD_PIN_CODE = "123456";
+                // modem.simUnlock(SIMCARD_PIN_CODE);
+                break;
+            default:
+                break;
+            }
+            delay(1000);
         }
 
-        if (!modem.mqtt_connected()) {
-            mqtt_connect();
-        } else {
+        //SIM7672G Can't set network mode
+#ifndef TINY_GSM_MODEM_SIM7672
+        if (!modem.setNetworkMode(MODEM_NETWORK_AUTO)) {
+            Serial.println("Set network mode failed!");
+        }
+        String mode = modem.getNetworkModeString();
+        Serial.print("Current network mode : ");
+        Serial.println(mode);
+#endif
+
+#ifdef NETWORK_APN
+        Serial.printf("Set network apn : %s\n", NETWORK_APN);
+        modem.sendAT(GF("+CGDCONT=1,\"IP\",\""), NETWORK_APN, "\"");
+        if (modem.waitResponse() != 1) {
+            Serial.println("Set network apn error !");
+        }
+#endif
+
+        // Check network registration status and network signal status
+        int16_t sq ;
+        Serial.print("Wait for the modem to register with the network.");
+        RegStatus status = REG_NO_RESULT;
+        while (status == REG_NO_RESULT || status == REG_SEARCHING || status == REG_UNREGISTERED) {
+            status = modem.getRegistrationStatus();
+            switch (status) {
+            case REG_UNREGISTERED:
+            case REG_SEARCHING:
+                blink(1);
+
+                sq = modem.getSignalQuality();
+                Serial.printf("[%lu] Signal Quality:%d\n", millis() / 1000, sq);
+                delay(1000);
+                break;
+            case REG_DENIED:
+                blink(2);
+                delay(1000); // temp
+                Serial.println("Network registration was rejected, please check if the APN is correct");
+                return ;
+            case REG_OK_HOME:
+                blink(3);
+                delay(1000); // temp
+                Serial.println("Online registration successful");
+                break;
+            case REG_OK_ROAMING:
+                blink(4);
+                delay(1000); // temp
+                Serial.println("Network registration successful, currently in roaming mode");
+                break;
+            default:
+                blink(5);
+                Serial.printf("Registration Status:%d\n", status);
+                delay(1000);
+                break;
+            }
+        }
+        Serial.println();
+
+        Serial.printf("Registration Status:%d\n", status);
+        delay(1000);
+
+        if (modem.getSystemInformation(ueInfo)) {
+            Serial.print("Inquiring UE system information:");
+            Serial.println(ueInfo);
+        }
+
+        imei = modem.getIMEI();
+        
+        Serial.print("IMEI: ");
+        Serial.println(imei.c_str());
+
+        if (!modem.setNetworkActive()) {
+            Serial.println("Enable network failed!");
+        }
+
+        delay(5000);
+
+        String ipAddress = modem.getLocalIP();
+        Serial.print("Network IP:"); Serial.println(ipAddress);
+
+        // Initialize MQTT, use SSL, skip authentication server
+        modem.mqtt_begin(false);
+
+        mqtt_connect();
+
+        if(send_config) {
+            config_topic_formatted = fmt::format(config_topic, imei.c_str());
+            config_payload_formatted = fmt::format(config_payload, imei.c_str());
+
+            Serial.print(config_topic_formatted.c_str());
+            Serial.print(config_payload_formatted.c_str());
+
+            result = modem.mqtt_publish(0, config_topic_formatted.c_str(), config_payload_formatted.c_str());
+
+            if(result) {
+                Serial.print("Config publish successfully.");
+            }
+            else {
+                Serial.print("Config publish failed.");
+            }
+        }
+
+        if(send_state) {
             state_topic_formatted = fmt::format(state_topic, imei.c_str());
-            payload_formatted = fmt::format(state_payload, (float)consumableRaw/224, (float)consumableRaw/224, consumableRaw, consumableRaw);
+            payload_formatted = fmt::format(state_payload, (float)startRaw/224, (float)consumableRaw/224, startRaw, consumableRaw);
 
             result = modem.mqtt_publish(0, state_topic_formatted.c_str(), payload_formatted.c_str());
 
@@ -350,11 +391,34 @@ void loop()
                 Serial.print("State publish failed.");
             }
         }
+
+        modem.mqtt_handle();
+
+        modem.mqtt_disconnect();
+
+        modem.poweroff();
     }
 
-    modem.mqtt_handle();
+    if(count >= 1440) {
+        count = 0;
+    }
+    else {
+        count++;
+    }
 
-    delay(60000);
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    esp_deep_sleep_start();
+}
+
+void loop()
+{
+    // Debug AT
+    while (SerialAT.available()) {
+        Serial.write(SerialAT.read());
+    }
+    while (Serial.available()) {
+        SerialAT.write(Serial.read());
+    }
 }
 
 #ifndef TINY_GSM_FORK_LIBRARY
